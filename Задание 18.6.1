@@ -1,0 +1,59 @@
+import telebot
+import requests
+import json
+
+TOKEN = "your_token_here"
+API_KEY = "your_api_key_here"
+
+bot = telebot.TeleBot(TOKEN)
+
+class APIException(Exception):
+    def __init__(self, message):
+        self.message = message
+
+def get_exchange_rate(base_currency, quote_currency, amount):
+    url = f"https://min-api.cryptocompare.com/data/price?fsym={base_currency}&tsyms={quote_currency}"
+    headers = {"authorization": f"Apikey {API_KEY}"}
+
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        raise APIException(f"An error occurred while accessing the API: {response.content.decode('utf-8')}")
+
+    data = json.loads(response.content.decode("utf-8"))
+
+    if quote_currency not in data:
+        raise APIException("The currency you entered is invalid!")
+
+    exchange_rate = data[quote_currency]
+    converted_rate = exchange_rate * amount
+
+    return converted_rate
+
+
+@bot.message_handler(commands=["start", "help"])
+def send_welcome(message):
+    bot.reply_to(message, f"Hello! To use this bot, send a message in the following format:\n<base_currency> <quote_currency> <amount>\nFor example: BTC USD 1")
+
+
+@bot.message_handler(commands=["values"])
+def send_values(message):
+    bot.reply_to(message, f"The available currencies are: BTC, ETH, LTC, XRP, EUR, USD, RUB.")
+
+
+@bot.message_handler(func=lambda message: True)
+def convert_currency(message):
+    try:
+        user_input = message.text.split()
+        base_currency = user_input[0].upper()
+        quote_currency = user_input[1].upper()
+        amount = float(user_input[2])
+
+        converted_rate = get_exchange_rate(base_currency, quote_currency, amount)
+        bot.reply_to(message, f"{amount} {base_currency} is currently worth {converted_rate:.2f} {quote_currency}.")
+    except APIException as e:
+        bot.reply_to(message, f"Error: {e.message}")
+    except:
+        bot.reply_to(message, "Error: please enter a valid input in the format <base_currency> <quote_currency> <amount>. For example: BTC USD 1")
+
+
+bot.polling()
